@@ -7,8 +7,8 @@ the project whenever its structure, conventions, or tooling change.
 
 `chezget` is a companion to [chezmoi](https://github.com/twpayne/chezmoi). It
 reads an INI configuration file listing Go and Rust packages and runs
-`go install` / `cargo install` for each entry. See `designdoc.md` for the full
-specification and `README.md` for user-facing documentation.
+`go install` / `cargo install` for each entry. See `README.md` for user-facing
+documentation.
 
 ## Build & test commands
 
@@ -63,6 +63,12 @@ main.App.Run
 ## Coding conventions
 
 - Go 1.26 module path: `github.com/alexript/chezget`. Do not change it.
+- Every `.go` file starts with the SPDX/MIT header:
+  ```go
+  // SPDX-License-Identifier: MIT
+  // Copyright (c) 2026 Alex 'Ript' Malyshev
+  ```
+  Keep this header on any new source file.
 - Follow standard Go project layout: `cmd/<binary>/main.go` for entrypoints,
   everything else under `internal/`.
 - No external runtime dependencies. The INI parser is hand-written to keep the
@@ -78,8 +84,10 @@ main.App.Run
 
 ## Testing requirements
 
-- Overall coverage target: 60%+; critical packages (`installer`, `config`) aim
-  for 80%+.
+- Overall coverage target: 60%+; critical packages (`installer`, `config`,
+  `runner`) and the `cmd/chezget` entrypoint aim for 80%+. Current coverage:
+  `installer` 100%, `runner` 100%, `config` 91.1%, `app` 93.8%,
+  `cmd/chezget` 93.3% (overall ~93%).
 - Tests must pass via `go test ./...` with no network access and no real
   `go`/`cargo` invocations. Use recording runners / string readers, not the
   production exec runner.
