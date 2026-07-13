@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alex 'Ript' Malyshev
+
 // Package main is the entrypoint for the chezget command.
 //
 // chezget is a companion to chezmoi: it reads a small INI configuration file
@@ -7,6 +10,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
 	"os"
 
 	"github.com/alexript/chezget/internal/app"
@@ -16,16 +21,33 @@ import (
 // -ldflags "-X main.version=...".
 var version = "dev"
 
-func main() {
-	configPath := flag.String("config", "", "path to the chezget config file (overrides XDG location)")
-	showVersion := flag.Bool("version", false, "print the chezget version and exit")
-	flag.Parse()
-
-	if *showVersion {
-		os.Stdout.WriteString("chezget " + version + "\n")
-		return
+// run is the testable body of the chezget command. It parses flags from args,
+// writes diagnostics to stderr and version/output to stdout, and returns the
+// process exit code. Keeping the logic here rather than in main() allows
+// unit tests to inject args and capture output.
+func run(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("chezget", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, "Usage of chezget:\n")
+		fs.PrintDefaults()
 	}
 
-	a := app.New(app.Options{ConfigPath: *configPath})
-	os.Exit(a.Run())
+	configPath := fs.String("config", "", "path to the chezget config file (overrides XDG location)")
+	showVersion := fs.Bool("version", false, "print the chezget version and exit")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	if *showVersion {
+		fmt.Fprintf(stdout, "chezget %s\n", version)
+		return 0
+	}
+
+	a := app.New(app.Options{ConfigPath: *configPath, Stdout: stdout, Stderr: stderr})
+	return a.Run()
+}
+
+func main() {
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }

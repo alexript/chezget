@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alex 'Ript' Malyshev
+
 // Package app wires together the config loader and the installers and is the
 // single place where the CLI-level orchestration lives. Keeping the logic out
 // of package main makes it straightforward to unit-test the end-to-end flow.

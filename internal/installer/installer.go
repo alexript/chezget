@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alex 'Ript' Malyshev
+
 // Package installer turns package specifications loaded from the chezget
 // configuration file into concrete invocations of the appropriate package
 // managers (go install for Go packages, cargo install for Rust crates).

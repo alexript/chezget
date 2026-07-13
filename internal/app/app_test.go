@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alex 'Ript' Malyshev
+
 package app
 
 import (
@@ -7,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alexript/chezget/internal/config"
 )
 
 // recordingRunner records invocations and can fail per spec (last arg).
@@ -181,6 +186,24 @@ func TestHintPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/xdg/home")
 	if got := hintPath(); got != filepath.Join("/xdg/home", "chezget", "config.ini") {
 		t.Fatalf("hintPath = %q", got)
+	}
+}
+
+func TestHintPathFallbackOnResolveError(t *testing.T) {
+	t.Setenv("CHEZGET_CONFIG", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+
+	_, err := config.ResolvePath()
+	if err == nil {
+		t.Skip("os.UserHomeDir() does not fail with empty HOME on this platform")
+	}
+
+	got := hintPath()
+	want := "$XDG_CONFIG_HOME/chezget/config.ini"
+	if got != want {
+		t.Fatalf("hintPath = %q, want %q", got, want)
 	}
 }
 

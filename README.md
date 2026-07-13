@@ -65,9 +65,13 @@ go install github.com/alexript/chezget/cmd/chezget@latest
 ```sh
 git clone https://github.com/alexript/chezget.git
 cd chezget
-make build      # produces a ./chezget binary
+make build      # produces a ./chezget binary (or: go build -o chezget ./cmd/chezget)
 make install    # installs into $(go env GOPATH)/bin
 ```
+
+> **Note:** The entrypoint lives in `cmd/chezget/`, so a bare `go build` from
+> the project root will report "no Go files in …". Build with
+> `go build ./cmd/chezget` or `make build` instead.
 
 ### Cross-platform builds
 

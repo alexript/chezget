@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alex 'Ript' Malyshev
+
 // Package config loads and parses the chezget configuration file.
 //
 // The configuration uses a small INI dialect with two recognized sections:

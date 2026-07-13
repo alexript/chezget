@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Alex 'Ript' Malyshev
+
 // Package runner provides an abstraction over spawning external commands so
 // that callers can be unit-tested without touching the real process tree.
 package runner

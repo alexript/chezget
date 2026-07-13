@@ -24,6 +24,11 @@ specification and `README.md` for user-facing documentation.
 
 The binary artifact must be named `chezget`.
 
+> **Note:** A bare `go build` from the project root fails because the
+> entrypoint lives in `cmd/chezget/`. Always use `go build ./cmd/chezget`
+> (or `make build`) instead. This is intentional and follows the standard
+> Go project layout.
+
 ## Architecture
 
 The code is split into small, single-responsibility packages so that each one
