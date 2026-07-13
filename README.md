@@ -57,7 +57,7 @@ the parser.
 ### From source
 
 ```sh
-go install github.com/alexript/chezget/cmd/chezget@latest
+go install github.com/alexript/chezget@latest
 ```
 
 ### Build locally
@@ -65,13 +65,9 @@ go install github.com/alexript/chezget/cmd/chezget@latest
 ```sh
 git clone https://github.com/alexript/chezget.git
 cd chezget
-make build      # produces a ./chezget binary (or: go build -o chezget ./cmd/chezget)
+make build      # produces a ./chezget binary (or: go build -o chezget .)
 make install    # installs into $(go env GOPATH)/bin
 ```
-
-> **Note:** The entrypoint lives in `cmd/chezget/`, so a bare `go build` from
-> the project root will report "no Go files in …". Build with
-> `go build ./cmd/chezget` or `make build` instead.
 
 ### Cross-platform builds
 
@@ -111,7 +107,7 @@ which must be installed and available on `PATH` for `chezget` to do its job.
 ## Project layout
 
 ```
-cmd/chezget/      entrypoint
+main.go          entrypoint
 internal/app/     CLI orchestration (loads config, runs installers)
 internal/config/  INI parser and XDG path resolution
 internal/installer/  go/cargo installer implementations

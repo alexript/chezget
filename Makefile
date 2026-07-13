@@ -13,7 +13,7 @@
 
 BINARY  := chezget
 MODULE  := github.com/alexript/chezget
-MAIN    := $(MODULE)/cmd/chezget
+MAIN    := $(MODULE)
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X main.version=$(VERSION)
 
@@ -24,7 +24,7 @@ GOARCH_LIST := amd64 arm64
 all: build
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/chezget
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
 
 test:
 	go test ./...
@@ -54,9 +54,9 @@ cross:
 	    if [ $$os = windows ]; then ext=".exe"; fi; \
 	    echo "  -> $$os/$$arch"; \
 	    GOOS=$$os GOARCH=$$arch go build -ldflags "$(LDFLAGS)" \
-	      -o dist/$(BINARY)-$$os-$$arch$$ext ./cmd/chezget || exit 1; \
+	      -o dist/$(BINARY)-$$os-$$arch$$ext . || exit 1; \
 	  done; \
 	done
 
 install:
-	go install -ldflags "$(LDFLAGS)" ./cmd/chezget
+	go install -ldflags "$(LDFLAGS)" .

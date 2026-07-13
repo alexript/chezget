@@ -14,7 +14,7 @@ documentation.
 
 | Task               | Command                              |
 | ------------------ | ------------------------------------ |
-| Build the binary   | `make build` (or `go build -o chezget ./cmd/chezget`) |
+| Build the binary   | `make build` (or `go build -o chezget .`) |
 | Run unit tests     | `make test` (or `go test ./...`)     |
 | Coverage report   | `make cover` or `make cover-html`    |
 | Lint              | `make vet` (or `go vet ./...`)       |
@@ -24,17 +24,16 @@ documentation.
 
 The binary artifact must be named `chezget`.
 
-> **Note:** A bare `go build` from the project root fails because the
-> entrypoint lives in `cmd/chezget/`. Always use `go build ./cmd/chezget`
-> (or `make build`) instead. This is intentional and follows the standard
-> Go project layout.
+> **Note:** The entrypoint lives in the project root (`main.go`), so a bare
+> `go build .` works from the project root. Use `make build` for the
+> version-stamped binary.
 
 ## Architecture
 
 The code is split into small, single-responsibility packages so that each one
 can be unit-tested in isolation:
 
-- `cmd/chezget/main.go` - the CLI entrypoint. It parses flags and delegates to
+- `main.go` - the CLI entrypoint. It parses flags and delegates to
   `internal/app`. Keep it thin: any new logic belongs in a package so it can be
   tested.
 - `internal/app` - wires the config loader together with the installers and
@@ -69,8 +68,8 @@ main.App.Run
   // Copyright (c) 2026 Alex 'Ript' Malyshev
   ```
   Keep this header on any new source file.
-- Follow standard Go project layout: `cmd/<binary>/main.go` for entrypoints,
-  everything else under `internal/`.
+- Standard Go project layout: `main.go` at the module root for the single
+  binary, everything else under `internal/`.
 - No external runtime dependencies. The INI parser is hand-written to keep the
   module dependency-free and easy to audit. New features should prefer the
   standard library; only add external deps if their license is MIT-compatible
@@ -85,9 +84,9 @@ main.App.Run
 ## Testing requirements
 
 - Overall coverage target: 60%+; critical packages (`installer`, `config`,
-  `runner`) and the `cmd/chezget` entrypoint aim for 80%+. Current coverage:
+  `runner`) and the root `main.go` entrypoint aim for 80%+. Current coverage:
   `installer` 100%, `runner` 100%, `config` 91.1%, `app` 93.8%,
-  `cmd/chezget` 93.3% (overall ~93%).
+  `main` 93.3% (overall ~93%).
 - Tests must pass via `go test ./...` with no network access and no real
   `go`/`cargo` invocations. Use recording runners / string readers, not the
   production exec runner.
