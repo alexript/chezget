@@ -1,0 +1,16 @@
+# Build artifacts
+/chezget
+dist/
+*.exe
+
+# Coverage reports
+coverage.out
+coverage.html
+
+# Editor / OS files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.crush
