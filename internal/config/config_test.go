@@ -31,31 +31,31 @@ should-not-appear
 
 func TestParseBasic(t *testing.T) {
 	t.Parallel()
-	cfg, err := Parse(strings.NewReader(sampleConfig))
+	cfg, err := Parse(strings.NewReader(sampleConfig), "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if got, want := len(cfg.Go), 2; got != want {
-		t.Fatalf("len(Go) = %d, want %d", got, want)
+	if got, want := len(cfg.Sections["go"]), 2; got != want {
+		t.Fatalf("len(go) = %d, want %d", got, want)
 	}
-	if cfg.Go[0] != "github.com/jesseduffield/lazygit@latest" {
-		t.Fatalf("Go[0] = %q", cfg.Go[0])
+	if cfg.Sections["go"][0] != "github.com/jesseduffield/lazygit@latest" {
+		t.Fatalf("go[0] = %q", cfg.Sections["go"][0])
 	}
-	if got, want := len(cfg.Rust), 2; got != want {
-		t.Fatalf("len(Rust) = %d, want %d", got, want)
+	if got, want := len(cfg.Sections["rust"]), 2; got != want {
+		t.Fatalf("len(rust) = %d, want %d", got, want)
 	}
-	if cfg.Rust[0] != "ripgrep" {
-		t.Fatalf("Rust[0] = %q", cfg.Rust[0])
+	if cfg.Sections["rust"][0] != "ripgrep" {
+		t.Fatalf("rust[0] = %q", cfg.Sections["rust"][0])
 	}
 }
 
 func TestParseEmpty(t *testing.T) {
 	t.Parallel()
-	cfg, err := Parse(strings.NewReader(""))
+	cfg, err := Parse(strings.NewReader(""), "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if len(cfg.Go) != 0 || len(cfg.Rust) != 0 {
+	if len(cfg.Sections) != 0 {
 		t.Fatalf("expected empty config, got %+v", cfg)
 	}
 }
@@ -72,28 +72,28 @@ func TestParseCommentsAndBlankLines(t *testing.T) {
   
 github.com/foo/bar
 `
-	cfg, err := Parse(strings.NewReader(src))
+	cfg, err := Parse(strings.NewReader(src), "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if len(cfg.Go) != 1 {
-		t.Fatalf("len(Go) = %d, want 1", len(cfg.Go))
+	if got := len(cfg.Sections["go"]); got != 1 {
+		t.Fatalf("len(go) = %d, want 1", got)
 	}
-	if cfg.Go[0] != "github.com/foo/bar" {
-		t.Fatalf("Go[0] = %q", cfg.Go[0])
+	if cfg.Sections["go"][0] != "github.com/foo/bar" {
+		t.Fatalf("go[0] = %q", cfg.Sections["go"][0])
 	}
 }
 
 func TestParseTrimsWhitespace(t *testing.T) {
 	t.Parallel()
 	src := "[go]\n   github.com/foo/bar   \n\tgolang.org/x/pkga\n"
-	cfg, err := Parse(strings.NewReader(src))
+	cfg, err := Parse(strings.NewReader(src), "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	for i, pkg := range cfg.Go {
+	for i, pkg := range cfg.Sections["go"] {
 		if pkg != strings.TrimSpace(pkg) {
-			t.Fatalf("Go[%d] = %q has surrounding whitespace", i, pkg)
+			t.Fatalf("go[%d] = %q has surrounding whitespace", i, pkg)
 		}
 	}
 }
@@ -107,15 +107,18 @@ keep-me
 [rust]
 keep-rust
 `
-	cfg, err := Parse(strings.NewReader(src))
+	cfg, err := Parse(strings.NewReader(src), "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if len(cfg.Go) != 1 || cfg.Go[0] != "keep-me" {
-		t.Fatalf("Go = %v", cfg.Go)
+	if got := len(cfg.Sections["go"]); got != 1 || cfg.Sections["go"][0] != "keep-me" {
+		t.Fatalf("go = %v", cfg.Sections["go"])
 	}
-	if len(cfg.Rust) != 1 || cfg.Rust[0] != "keep-rust" {
-		t.Fatalf("Rust = %v", cfg.Rust)
+	if got := len(cfg.Sections["rust"]); got != 1 || cfg.Sections["rust"][0] != "keep-rust" {
+		t.Fatalf("rust = %v", cfg.Sections["rust"])
+	}
+	if _, ok := cfg.Sections["notes"]; ok {
+		t.Fatalf("notes should not be captured")
 	}
 }
 
@@ -125,33 +128,89 @@ func TestParsePackagesBeforeAnySection(t *testing.T) {
 [go]
 real-package
 `
-	cfg, err := Parse(strings.NewReader(src))
+	cfg, err := Parse(strings.NewReader(src), "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if len(cfg.Go) != 1 || cfg.Go[0] != "real-package" {
-		t.Fatalf("Go = %v", cfg.Go)
+	if got := len(cfg.Sections["go"]); got != 1 || cfg.Sections["go"][0] != "real-package" {
+		t.Fatalf("go = %v", cfg.Sections["go"])
 	}
-	if len(cfg.Rust) != 0 {
-		t.Fatalf("Rust = %v, want empty", cfg.Rust)
+	if got := len(cfg.Sections["rust"]); got != 0 {
+		t.Fatalf("rust = %v, want empty", cfg.Sections["rust"])
 	}
 }
 
 func TestParseSectionHeaderWithSpaces(t *testing.T) {
 	t.Parallel()
 	src := "[ go ]\nexample.com/pkg\n"
+	cfg, err := Parse(strings.NewReader(src), "go", "rust")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := len(cfg.Sections["go"]); got != 1 || cfg.Sections["go"][0] != "example.com/pkg" {
+		t.Fatalf("go = %v", cfg.Sections["go"])
+	}
+}
+
+func TestParseRecognizesDynamicSections(t *testing.T) {
+	t.Parallel()
+	src := `[foo]
+pkg-one
+pkg-two
+[bar]
+crate-x
+`
+	cfg, err := Parse(strings.NewReader(src), "foo", "bar")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := len(cfg.Sections["foo"]); got != 2 {
+		t.Fatalf("len(foo) = %d, want 2", got)
+	}
+	if cfg.Sections["foo"][0] != "pkg-one" || cfg.Sections["foo"][1] != "pkg-two" {
+		t.Fatalf("foo = %v", cfg.Sections["foo"])
+	}
+	if got := len(cfg.Sections["bar"]); got != 1 || cfg.Sections["bar"][0] != "crate-x" {
+		t.Fatalf("bar = %v", cfg.Sections["bar"])
+	}
+}
+
+func TestParseIgnoresUnrecognizedSection(t *testing.T) {
+	t.Parallel()
+	src := `[go]
+keep-me
+[rust]
+should-be-ignored
+`
+	cfg, err := Parse(strings.NewReader(src), "go")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := len(cfg.Sections["go"]); got != 1 || cfg.Sections["go"][0] != "keep-me" {
+		t.Fatalf("go = %v", cfg.Sections["go"])
+	}
+	if _, ok := cfg.Sections["rust"]; ok {
+		t.Fatalf("rust should not be captured when not recognized")
+	}
+}
+
+func TestParseNoRecognizedSections(t *testing.T) {
+	t.Parallel()
+	src := `[go]
+should-be-ignored
+`
 	cfg, err := Parse(strings.NewReader(src))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if len(cfg.Go) != 1 || cfg.Go[0] != "example.com/pkg" {
-		t.Fatalf("Go = %v", cfg.Go)
+	if len(cfg.Sections) != 0 {
+		t.Fatalf("expected empty config, got %+v", cfg)
 	}
 }
 
 func TestLoadFromMissingFile(t *testing.T) {
 	t.Parallel()
-	_, err := LoadFrom(filepath.Join(t.TempDir(), "does-not-exist.ini"))
+	_, err := LoadFrom(filepath.Join(t.TempDir(), "does-not-exist.ini"), "go", "rust")
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}
@@ -163,7 +222,7 @@ func TestLoadFromMissingFile(t *testing.T) {
 func TestLoadFromEmptyConfig(t *testing.T) {
 	t.Parallel()
 	path := writeTempFile(t, "# just comments\n\n[notes]\nfoo\n")
-	_, err := LoadFrom(path)
+	_, err := LoadFrom(path, "go", "rust")
 	if !errors.Is(err, ErrEmpty) {
 		t.Fatalf("err = %v, want ErrEmpty", err)
 	}
@@ -172,14 +231,14 @@ func TestLoadFromEmptyConfig(t *testing.T) {
 func TestLoadFromValid(t *testing.T) {
 	t.Parallel()
 	path := writeTempFile(t, sampleConfig)
-	cfg, err := LoadFrom(path)
+	cfg, err := LoadFrom(path, "go", "rust")
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
 	if cfg.Path != path {
 		t.Fatalf("cfg.Path = %q, want %q", cfg.Path, path)
 	}
-	if len(cfg.Go) != 2 || len(cfg.Rust) != 2 {
+	if len(cfg.Sections["go"]) != 2 || len(cfg.Sections["rust"]) != 2 {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 }
@@ -271,18 +330,18 @@ func TestConfigDirOverrideEnv(t *testing.T) {
 
 func TestLoadViaEnvOverride(t *testing.T) {
 	t.Setenv("CHEZGET_CONFIG", writeTempFile(t, sampleConfig))
-	cfg, err := Load()
+	cfg, err := Load("go", "rust")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.Go) != 2 || len(cfg.Rust) != 2 {
+	if len(cfg.Sections["go"]) != 2 || len(cfg.Sections["rust"]) != 2 {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 }
 
 func TestLoadMissingViaEnvOverride(t *testing.T) {
 	t.Setenv("CHEZGET_CONFIG", filepath.Join(t.TempDir(), "nope.ini"))
-	_, err := Load()
+	_, err := Load("go", "rust")
 	if err == nil || !IsMissing(err) {
 		t.Fatalf("err = %v, want missing", err)
 	}

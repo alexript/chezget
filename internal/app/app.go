@@ -50,12 +50,18 @@ func New(opts Options) *App {
 	return &App{opts: opts, out: out, err: errw}
 }
 
-// Run performs the install: load configuration, then run go and cargo
+// Run performs the install: load configuration, then run the registered
 // installers for the listed specs. It returns a non-zero exit code (1) when
 // the configuration cannot be loaded or when at least one installation
 // fails, and 0 on success.
 func (a *App) Run() int {
-	cfg, err := a.loadConfig()
+	execRunner := a.opts.Runner
+	if execRunner == nil {
+		execRunner = runner.NewExecRunner()
+	}
+	installers := installer.DefaultInstallers(execRunner)
+
+	cfg, err := a.loadConfig(installer.SectionNames(installers)...)
 	if err != nil {
 		fmt.Fprintf(a.err, "chezget: %v\n", err)
 		if config.IsMissing(err) {
@@ -64,20 +70,7 @@ func (a *App) Run() int {
 		return 1
 	}
 
-	execRunner := a.opts.Runner
-	if execRunner == nil {
-		execRunner = runner.NewExecRunner()
-	}
-	installers := []installer.Installer{
-		installer.NewGoInstaller(execRunner),
-		installer.NewRustInstaller(execRunner),
-	}
-	specs := map[string][]string{
-		"go":   cfg.Go,
-		"rust": cfg.Rust,
-	}
-
-	results := installer.RunAll(installers, specs)
+	results := installer.RunAll(installers, cfg.Sections)
 	for _, r := range results {
 		if r.Failed() {
 			fmt.Fprintf(a.err, "chezget: %s: %s: %v\n", r.Installer, r.Spec, r.Err)
@@ -94,12 +87,13 @@ func (a *App) Run() int {
 }
 
 // loadConfig resolves the configuration path (honoring Options.ConfigPath and
-// the CHEZGET_CONFIG environment variable) and parses it.
-func (a *App) loadConfig() (config.Config, error) {
+// the CHEZGET_CONFIG environment variable) and parses it. sections lists the
+// section names the parser should recognize.
+func (a *App) loadConfig(sections ...string) (config.Config, error) {
 	if a.opts.ConfigPath != "" {
-		return config.LoadFrom(a.opts.ConfigPath)
+		return config.LoadFrom(a.opts.ConfigPath, sections...)
 	}
-	return config.Load()
+	return config.Load(sections...)
 }
 
 // hintPath returns the default configuration file path to suggest to the user

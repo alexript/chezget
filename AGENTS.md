@@ -42,10 +42,15 @@ can be unit-tested in isolation:
 - `internal/config` - INI parser and XDG path resolution. The parser is
   deliberately minimal and dependency-free; see the package doc for the grammar.
   Config is read from `$XDG_CONFIG_HOME/chezget/config.ini` by default,
-  overridable via `CHEZGET_CONFIG` or the `--config` flag.
+  overridable via `CHEZGET_CONFIG` or the `--config` flag. Recognized section
+  names are not hardcoded: callers pass them (typically derived from
+  `installer.SectionNames`) to `Parse`, `Load`, or `LoadFrom`.
 - `internal/installer` - `GoInstaller` and `RustInstaller` implement the
-  `Installer` interface. Each spec is installed in its own process invocation
-  so a single failure does not abort the run.
+  `Installer` interface. Each lives in its own source file
+  (`go_installer.go`, `rust_installer.go`). `DefaultInstallers` returns all
+  built-in installers wired to a runner; add new installers there. Each spec
+  is installed in its own process invocation so a single failure does not
+  abort the run.
 - `internal/runner` - abstracts command execution. `ExecRunner` is the
   production implementation; tests use recording runners to assert the argv
   without spawning processes.
@@ -54,8 +59,10 @@ can be unit-tested in isolation:
 
 ```
 main.App.Run
-  -> config.Load (ResolvePath -> LoadFrom -> Parse)
-  -> installer.RunAll([GoInstaller, RustInstaller], specs)
+  -> installer.DefaultInstallers(runner)
+  -> config.Load(installer.SectionNames(installers)...)
+       (ResolvePath -> LoadFrom -> Parse)
+  -> installer.RunAll(installers, cfg.Sections)
        -> each Installer.Install -> Runner.Run("go"|"cargo", "install", spec)
 ```
 
@@ -85,8 +92,8 @@ main.App.Run
 
 - Overall coverage target: 60%+; critical packages (`installer`, `config`,
   `runner`) and the root `main.go` entrypoint aim for 80%+. Current coverage:
-  `installer` 100%, `runner` 100%, `config` 91.1%, `app` 93.8%,
-  `main` 93.3% (overall ~93%).
+  `installer` 100%, `runner` 100%, `config` 91.2%, `app` 96.8%,
+  `main` 93.3% (overall ~95.5%).
 - Tests must pass via `go test ./...` with no network access and no real
   `go`/`cargo` invocations. Use recording runners / string readers, not the
   production exec runner.
@@ -94,10 +101,11 @@ main.App.Run
 
 ## Configuration file format
 
-INI dialect. Recognized sections: `[go]`, `[rust]`. Comments start with `#` or
-`;`. Each non-empty line under a section is a package spec passed verbatim to
-the package manager (last arg of `go install` / `cargo install`). Unknown
-sections are ignored.
+INI dialect. Recognized sections are determined dynamically by the registered
+installers (currently `[go]` and `[rust]`). Comments start with `#` or `;`.
+Each non-empty line under a section is a package spec passed verbatim to the
+package manager (last arg of `go install` / `cargo install`). Unknown sections
+are ignored. To add a new section/installer, see `internal/installer`.
 
 ## Cross-platform support
 

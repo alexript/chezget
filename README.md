@@ -23,10 +23,11 @@ the `--config` flag.
 
 ### Format
 
-The file is a minimal INI dialect with two recognized sections, `[go]` and
-`[rust]`. Each non-empty, non-comment line under a section is a package
-specification understood by the corresponding package manager. Lines starting
-with `#` or `;` are comments.
+The file is a minimal INI dialect. Each section corresponds to an installer;
+`chezget` ships with `[go]` (installed via `go install <spec>`) and
+`[rust]` (installed via `cargo install <spec>`). Each non-empty, non-comment
+line under a section is a package specification understood by the
+corresponding package manager. Lines starting with `#` or `;` are comments.
 
 ```ini
 # Go packages (installed via `go install <spec>`)
@@ -107,13 +108,28 @@ which must be installed and available on `PATH` for `chezget` to do its job.
 ## Project layout
 
 ```
-main.go          entrypoint
-internal/app/     CLI orchestration (loads config, runs installers)
-internal/config/  INI parser and XDG path resolution
-internal/installer/  go/cargo installer implementations
-internal/runner/  command-execution abstraction (for testability)
+main.go              entrypoint
+internal/app/         CLI orchestration (loads config, runs installers)
+internal/config/      INI parser and XDG path resolution
+internal/installer/   installer interface and implementations
+                         (go_installer.go, rust_installer.go)
+internal/runner/      command-execution abstraction (for testability)
 ```
 
 ## License
 
 [MIT](LICENSE) © Alex 'Ript' Malyshev
+
+## Adding a new installer
+
+Each installer lives in its own file under `internal/installer/` and
+implements the `Installer` interface (`Name()` + `Install()`). To add support
+for a new package manager:
+
+1. Create `internal/installer/<name>_installer.go` with a type implementing
+   `Installer`. The value returned by `Name()` is also the config section
+   header that groups specs for this installer.
+2. Add the constructor to `DefaultInstallers` in `installer.go`.
+
+No changes to the config parser or app orchestration are needed: recognized
+sections are derived from the registered installers automatically.

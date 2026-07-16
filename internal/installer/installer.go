@@ -3,7 +3,12 @@
 
 // Package installer turns package specifications loaded from the chezget
 // configuration file into concrete invocations of the appropriate package
-// managers (go install for Go packages, cargo install for Rust crates).
+// managers.
+//
+// Each package manager is implemented as an Installer in its own source file
+// (go_installer.go, rust_installer.go, ...). To add support for a new
+// manager, create a new file implementing the Installer interface and
+// register it in DefaultInstallers.
 //
 // Installers depend on a [github.com/alexript/chezget/internal/runner].Runner
 // so they can be unit-tested with a recording runner instead of spawning real
@@ -21,7 +26,8 @@ import (
 // language-specific package manager.
 type Installer interface {
 	// Name returns the human-readable name of the installer (e.g. "go",
-	// "rust").
+	// "rust"). The name doubles as the configuration file section header
+	// that groups specs for this installer.
 	Name() string
 	// Install installs every entry in specs, in order. Implementations should
 	// attempt each spec independently so a single failure does not prevent
@@ -61,72 +67,10 @@ func Summary(results []Result) string {
 	return b.String()
 }
 
-// GoInstaller installs Go packages using `go install <spec>`.
-type GoInstaller struct {
-	Runner runner.Runner
-}
-
-// NewGoInstaller returns a GoInstaller backed by r. If r is nil, the returned
-// installer's Install panics; callers should pass a non-nil runner such as
-// runner.NewExecRunner().
-func NewGoInstaller(r runner.Runner) *GoInstaller {
-	return &GoInstaller{Runner: r}
-}
-
-// Name returns "go".
-func (GoInstaller) Name() string { return "go" }
-
-// Command returns the argv that would be used to install spec, without running
-// it. It is exposed mainly for testability and inspection.
-func (GoInstaller) Command(spec string) (string, []string) {
-	return "go", []string{"install", spec}
-}
-
-// Install runs `go install <spec>` for every entry in specs. Each spec is
-// installed in its own process invocation so a failure on one does not block
-// the others.
-func (g *GoInstaller) Install(specs []string) []Result {
-	results := make([]Result, 0, len(specs))
-	for _, spec := range specs {
-		name, args := g.Command(spec)
-		err := g.Runner.Run(name, args...)
-		results = append(results, Result{Installer: g.Name(), Spec: spec, Err: err})
-	}
-	return results
-}
-
-// RustInstaller installs Rust crates using `cargo install <spec>`.
-type RustInstaller struct {
-	Runner runner.Runner
-}
-
-// NewRustInstaller returns a RustInstaller backed by r.
-func NewRustInstaller(r runner.Runner) *RustInstaller {
-	return &RustInstaller{Runner: r}
-}
-
-// Name returns "rust".
-func (RustInstaller) Name() string { return "rust" }
-
-// Command returns the argv used to install spec.
-func (RustInstaller) Command(spec string) (string, []string) {
-	return "cargo", []string{"install", spec}
-}
-
-// Install runs `cargo install <spec>` for every entry in specs.
-func (r *RustInstaller) Install(specs []string) []Result {
-	results := make([]Result, 0, len(specs))
-	for _, spec := range specs {
-		name, args := r.Command(spec)
-		err := r.Runner.Run(name, args...)
-		results = append(results, Result{Installer: r.Name(), Spec: spec, Err: err})
-	}
-	return results
-}
-
 // RunAll runs every installer against the specs recorded for it in specs and
-// returns the aggregated results, preserving installation order: all Go
-// packages first, then all Rust packages. A nil installer is skipped.
+// returns the aggregated results, preserving the order of installers. A nil
+// installer is skipped. Specs for an installer are looked up by the
+// installer's Name().
 func RunAll(installers []Installer, specs map[string][]string) []Result {
 	var out []Result
 	for _, in := range installers {
@@ -136,4 +80,28 @@ func RunAll(installers []Installer, specs map[string][]string) []Result {
 		out = append(out, in.Install(specs[in.Name()])...)
 	}
 	return out
+}
+
+// DefaultInstallers returns the set of installers built into chezget, wired
+// to the given runner. The order determines installation order and the order
+// sections are expected in the configuration file. Add new installers here
+// when introducing support for a new package manager.
+func DefaultInstallers(r runner.Runner) []Installer {
+	return []Installer{
+		NewGoInstaller(r),
+		NewRustInstaller(r),
+	}
+}
+
+// SectionNames returns the Name() of each installer in order, skipping nil
+// entries. It is a convenience for callers (such as the config loader) that
+// need the list of recognized section names.
+func SectionNames(installers []Installer) []string {
+	names := make([]string, 0, len(installers))
+	for _, in := range installers {
+		if in != nil {
+			names = append(names, in.Name())
+		}
+	}
+	return names
 }

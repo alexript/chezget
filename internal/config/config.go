@@ -3,7 +3,10 @@
 
 // Package config loads and parses the chezget configuration file.
 //
-// The configuration uses a small INI dialect with two recognized sections:
+// The configuration uses a small INI dialect. Each section corresponds to an
+// installer (identified by its Name), and each non-empty, non-comment line
+// under a section is a package specification interpreted by that installer's
+// package manager:
 //
 //	[go]
 //	github.com/jesseduffield/lazygit@latest
@@ -13,9 +16,11 @@
 //	ripgrep
 //	kotlin-lsp
 //
-// Each non-empty, non-comment line under a section is a package specification
-// interpreted by the package manager for that section (go install for the
-// "go" section, cargo install for the "rust" section).
+// The set of recognized sections is not hardcoded: callers pass the section
+// names (typically derived from the registered installers via
+// [github.com/alexript/chezget/internal/installer].SectionNames) to Parse,
+// Load, or LoadFrom. Sections not in that set are ignored so the file can
+// carry additional metadata without breaking the parser.
 //
 // The configuration file is resolved following the XDG Base Directory
 // Specification: $XDG_CONFIG_HOME/chezget/config.ini, falling back to
@@ -40,19 +45,13 @@ const AppName = "chezget"
 // config directory.
 const ConfigFile = "config.ini"
 
-// Section names recognized in the configuration file.
-const (
-	SectionGo   = "go"
-	SectionRust = "rust"
-)
-
 // Config holds the parsed contents of the chezget configuration file. The
 // Path field records where the configuration was loaded from so callers can
-// surface it in diagnostics.
+// surface it in diagnostics. Sections maps each recognized section name to
+// the list of package specs found under it.
 type Config struct {
-	Path string
-	Go   []string
-	Rust []string
+	Path     string
+	Sections map[string][]string
 }
 
 // ErrEmpty is returned by Load when the configuration file exists but
@@ -62,30 +61,32 @@ var ErrEmpty = errors.New("configuration file contains no packages")
 // Load reads and parses the configuration from the default XDG location. The
 // location is determined by ResolvePath and can be overridden through the
 // CHEZGET_CONFIG environment variable, which is useful for tests and ad-hoc
-// invocations.
-func Load() (Config, error) {
+// invocations. sections lists the section names to recognize (typically the
+// Name() of each registered installer).
+func Load(sections ...string) (Config, error) {
 	path, err := ResolvePath()
 	if err != nil {
 		return Config{}, err
 	}
-	return LoadFrom(path)
+	return LoadFrom(path, sections...)
 }
 
 // LoadFrom parses the configuration file at path. An empty result is reported
 // as ErrEmpty to distinguish "file missing" from "file present but unused".
-func LoadFrom(path string) (Config, error) {
+// sections lists the section names to recognize.
+func LoadFrom(path string, sections ...string) (Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("open config %q: %w", path, err)
 	}
 	defer f.Close()
 
-	cfg, err := Parse(f)
+	cfg, err := Parse(f, sections...)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse config %q: %w", path, err)
 	}
 	cfg.Path = path
-	if len(cfg.Go) == 0 && len(cfg.Rust) == 0 {
+	if len(cfg.Sections) == 0 {
 		return cfg, ErrEmpty
 	}
 	return cfg, nil
@@ -93,7 +94,8 @@ func LoadFrom(path string) (Config, error) {
 
 // Parse reads an INI-style configuration from r and returns the resulting
 // Config. Parse does not touch the filesystem, which makes it convenient to
-// unit-test with string readers.
+// unit-test with string readers. sections lists the section names to
+// recognize; any other section header in the input is ignored.
 //
 // The grammar is intentionally minimal:
 //
@@ -105,15 +107,20 @@ func LoadFrom(path string) (Config, error) {
 //     and package specifications.
 //   - Unknown sections are ignored so the file can carry additional metadata
 //     without breaking the parser.
-func Parse(r io.Reader) (Config, error) {
+func Parse(r io.Reader, sections ...string) (Config, error) {
+	recognized := make(map[string]struct{}, len(sections))
+	for _, s := range sections {
+		recognized[s] = struct{}{}
+	}
+
+	var cfg Config
+	cfg.Sections = make(map[string][]string)
+
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	var cfg Config
 	section := ""
-	lineNo := 0
 	for scanner.Scan() {
-		lineNo++
 		raw := scanner.Text()
 		line := strings.TrimSpace(raw)
 
@@ -123,20 +130,14 @@ func Parse(r io.Reader) (Config, error) {
 
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			section = strings.TrimSpace(line[1 : len(line)-1])
-			switch section {
-			case SectionGo, SectionRust:
-				// recognized section
-			default:
-				section = "" // ignore contents of unknown sections
+			if _, ok := recognized[section]; !ok {
+				section = "" // ignore contents of unrecognized sections
 			}
 			continue
 		}
 
-		switch section {
-		case SectionGo:
-			cfg.Go = append(cfg.Go, line)
-		case SectionRust:
-			cfg.Rust = append(cfg.Rust, line)
+		if section != "" {
+			cfg.Sections[section] = append(cfg.Sections[section], line)
 		}
 	}
 	if err := scanner.Err(); err != nil {
