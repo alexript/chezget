@@ -29,6 +29,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("chezget", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
+		fmt.Fprintf(stderr, "chezget is a small companion tool for chezmoi.\n")
+		fmt.Fprintf(stderr, "While chezmoi manages your dot files, chezget installs\n")
+		fmt.Fprintf(stderr, "the Go and Rust applications those dot files depend on,\n")
+		fmt.Fprintf(stderr, "running `go install` / `cargo install` for each entry.\n\n")
+		fmt.Fprintf(stderr, "Project page: https://github.com/alexript/chezget\n\n")
 		fmt.Fprintf(stderr, "Usage of chezget:\n")
 		fs.PrintDefaults()
 	}
