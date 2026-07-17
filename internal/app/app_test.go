@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -90,6 +91,7 @@ kotlin-lsp
 	var out, errw bytes.Buffer
 	a := New(Options{
 		ConfigPath: path,
+		OS:         "linux",
 		Runner:     rr,
 		Stdout:     &out,
 		Stderr:     &errw,
@@ -128,6 +130,7 @@ bad-crate
 	var out, errw bytes.Buffer
 	a := New(Options{
 		ConfigPath: path,
+		OS:         "linux",
 		Runner:     rr,
 		Stdout:     &out,
 		Stderr:     &errw,
@@ -146,7 +149,7 @@ func TestRunOnlyGoSection(t *testing.T) {
 example.com/pkg
 `)
 	rr := newRecordingRunner()
-	a := New(Options{ConfigPath: path, Runner: rr, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+	a := New(Options{ConfigPath: path, OS: "linux", Runner: rr, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
 	if code := a.Run(); code != 0 {
 		t.Fatal("expected success")
 	}
@@ -161,11 +164,70 @@ func TestRunOnlyRustSection(t *testing.T) {
 ripgrep
 `)
 	rr := newRecordingRunner()
-	a := New(Options{ConfigPath: path, Runner: rr, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+	a := New(Options{ConfigPath: path, OS: "linux", Runner: rr, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
 	if code := a.Run(); code != 0 {
 		t.Fatal("expected success")
 	}
 	if len(rr.calls) != 1 || rr.calls[0].name != "cargo" {
+		t.Fatalf("calls = %+v", rr.calls)
+	}
+}
+
+func TestRunOSSpecificSectionsMerge(t *testing.T) {
+	t.Parallel()
+	path := writeConfig(t, `[go]
+common-pkg
+[go windows]
+windows-pkg
+[go linux]
+linux-pkg
+`)
+	rr := newRecordingRunner()
+	a := New(Options{ConfigPath: path, OS: "windows", Runner: rr, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+	if code := a.Run(); code != 0 {
+		t.Fatal("expected success")
+	}
+	if len(rr.calls) != 2 {
+		t.Fatalf("calls = %+v, want 2", rr.calls)
+	}
+	if rr.calls[0].args[1] != "common-pkg" {
+		t.Fatalf("call[0] = %+v", rr.calls[0])
+	}
+	if rr.calls[1].args[1] != "windows-pkg" {
+		t.Fatalf("call[1] = %+v", rr.calls[1])
+	}
+}
+
+func TestRunOSSpecificSectionNonMatchReturns1(t *testing.T) {
+	t.Parallel()
+	path := writeConfig(t, `[go windows]
+windows-only
+`)
+	rr := newRecordingRunner()
+	var out, errw bytes.Buffer
+	a := New(Options{ConfigPath: path, OS: "linux", Runner: rr, Stdout: &out, Stderr: &errw})
+	if code := a.Run(); code != 1 {
+		t.Fatalf("code = %d, want 1; stderr=%q", code, errw.String())
+	}
+	if len(rr.calls) != 0 {
+		t.Fatalf("calls = %+v, want none", rr.calls)
+	}
+	if !strings.Contains(errw.String(), "no packages") && !strings.Contains(errw.String(), "contains no packages") {
+		t.Fatalf("stderr = %q", errw.String())
+	}
+}
+
+func TestRunOSDefaultsToRuntimeGOOS(t *testing.T) {
+	t.Parallel()
+	// Section targets the host OS under its runtime.GOOS name; with the
+	// default (empty Options.OS) the run should pick it up.
+	path := writeConfig(t, "[go "+runtime.GOOS+"]\nhost-only\n")
+	rr := newRecordingRunner()
+	a := New(Options{ConfigPath: path, Runner: rr, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+	if code := a.Run(); code != 0 {
+		t.Fatal("expected success on host OS")
+	}
+	if len(rr.calls) != 1 || rr.calls[0].args[1] != "host-only" {
 		t.Fatalf("calls = %+v", rr.calls)
 	}
 }

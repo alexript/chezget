@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/alexript/chezget/internal/config"
 	"github.com/alexript/chezget/internal/installer"
@@ -20,6 +21,10 @@ import (
 type Options struct {
 	// ConfigPath, when non-empty, overrides the default XDG config location.
 	ConfigPath string
+	// OS, when non-empty, overrides runtime.GOOS for selecting OS-specific
+	// config sections (e.g. "[go windows]"). When empty, runtime.GOOS is
+	// used. Tests inject a fixed value for deterministic behavior.
+	OS string
 	// Stdout and Stderr receive run output. When nil, os.Stdout/os.Stderr
 	// are used.
 	Stdout io.Writer
@@ -88,12 +93,17 @@ func (a *App) Run() int {
 
 // loadConfig resolves the configuration path (honoring Options.ConfigPath and
 // the CHEZGET_CONFIG environment variable) and parses it. sections lists the
-// section names the parser should recognize.
+// section names the parser should recognize. The OS used to filter
+// OS-specific sections comes from Options.OS, defaulting to runtime.GOOS.
 func (a *App) loadConfig(sections ...string) (config.Config, error) {
-	if a.opts.ConfigPath != "" {
-		return config.LoadFrom(a.opts.ConfigPath, sections...)
+	goos := a.opts.OS
+	if goos == "" {
+		goos = runtime.GOOS
 	}
-	return config.Load(sections...)
+	if a.opts.ConfigPath != "" {
+		return config.LoadFrom(a.opts.ConfigPath, goos, sections...)
+	}
+	return config.Load(goos, sections...)
 }
 
 // hintPath returns the default configuration file path to suggest to the user

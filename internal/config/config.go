@@ -16,11 +16,31 @@
 //	ripgrep
 //	kotlin-lsp
 //
-// The set of recognized sections is not hardcoded: callers pass the section
-// names (typically derived from the registered installers via
+// A section may be restricted to one or more operating systems by listing
+// them after the installer name. Packages under an OS-specific section are
+// only installed when chezget runs on a matching OS. Specs from matching
+// sections are concatenated in the order they appear, so a base [go] section
+// and a [go windows] section both contribute when running on Windows:
+//
+//	[go]
+//	github.com/foo/bar@latest
+//
+//	[go windows]
+//	github.com/airRnot1106/bkm@latest
+//
+//	[go freebsd,macos]
+//	github.com/yorukot/superfile@latest
+//
+// The recognized OS names are: windows, linux, freebsd, macos. The "macos"
+// name maps to Go's runtime.GOOS value "darwin". Raw runtime.GOOS values are
+// also accepted, so "darwin" works as an alias for "macos".
+//
+// The set of recognized section names is not hardcoded: callers pass them
+// (typically derived from the registered installers via
 // [github.com/alexript/chezget/internal/installer].SectionNames) to Parse,
-// Load, or LoadFrom. Sections not in that set are ignored so the file can
-// carry additional metadata without breaking the parser.
+// Load, or LoadFrom. Sections whose installer name is not in that set are
+// ignored so the file can carry additional metadata without breaking the
+// parser.
 //
 // The configuration file is resolved following the XDG Base Directory
 // Specification: $XDG_CONFIG_HOME/chezget/config.ini, falling back to
@@ -45,6 +65,28 @@ const AppName = "chezget"
 // config directory.
 const ConfigFile = "config.ini"
 
+// goosAliases maps the user-facing OS names accepted in section headers to
+// the corresponding runtime.GOOS values. "macos" is exposed instead of Go's
+// internal "darwin" so the configuration file uses familiar names. Raw
+// runtime.GOOS values are also accepted by matchOS, so "darwin" works as an
+// alias for "macos" even though it is not listed here.
+var goosAliases = map[string]string{
+	"windows": "windows",
+	"linux":   "linux",
+	"freebsd": "freebsd",
+	"macos":   "darwin",
+}
+
+// matchOS reports whether the OS name declared in a section header applies to
+// the current runtime.GOOS value (goos). configOS may be either a friendly
+// alias (e.g. "macos") or a raw runtime.GOOS value (e.g. "darwin").
+func matchOS(configOS, goos string) bool {
+	if resolved, ok := goosAliases[configOS]; ok {
+		return resolved == goos
+	}
+	return configOS == goos
+}
+
 // Config holds the parsed contents of the chezget configuration file. The
 // Path field records where the configuration was loaded from so callers can
 // surface it in diagnostics. Sections maps each recognized section name to
@@ -61,27 +103,30 @@ var ErrEmpty = errors.New("configuration file contains no packages")
 // Load reads and parses the configuration from the default XDG location. The
 // location is determined by ResolvePath and can be overridden through the
 // CHEZGET_CONFIG environment variable, which is useful for tests and ad-hoc
-// invocations. sections lists the section names to recognize (typically the
-// Name() of each registered installer).
-func Load(sections ...string) (Config, error) {
+// invocations. goos is the current runtime.GOOS value used to select
+// OS-specific sections (pass runtime.GOOS in production). sections lists the
+// section names to recognize (typically the Name() of each registered
+// installer).
+func Load(goos string, sections ...string) (Config, error) {
 	path, err := ResolvePath()
 	if err != nil {
 		return Config{}, err
 	}
-	return LoadFrom(path, sections...)
+	return LoadFrom(path, goos, sections...)
 }
 
 // LoadFrom parses the configuration file at path. An empty result is reported
 // as ErrEmpty to distinguish "file missing" from "file present but unused".
+// goos is the current runtime.GOOS value used to select OS-specific sections.
 // sections lists the section names to recognize.
-func LoadFrom(path string, sections ...string) (Config, error) {
+func LoadFrom(path, goos string, sections ...string) (Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("open config %q: %w", path, err)
 	}
 	defer f.Close()
 
-	cfg, err := Parse(f, sections...)
+	cfg, err := Parse(f, goos, sections...)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse config %q: %w", path, err)
 	}
@@ -94,20 +139,29 @@ func LoadFrom(path string, sections ...string) (Config, error) {
 
 // Parse reads an INI-style configuration from r and returns the resulting
 // Config. Parse does not touch the filesystem, which makes it convenient to
-// unit-test with string readers. sections lists the section names to
-// recognize; any other section header in the input is ignored.
+// unit-test with string readers. goos is the current runtime.GOOS value used
+// to select OS-specific sections (pass runtime.GOOS in production). sections
+// lists the section names to recognize; any other section header in the input
+// is ignored.
 //
 // The grammar is intentionally minimal:
 //
 //   - Lines starting with '#' or ';' are comments and ignored.
-//   - A line of the form "[section]" begins a new section.
+//   - A line of the form "[section]" begins a new section. The section text
+//     may optionally list one or more OS names after the installer name
+//     (e.g. "[go windows]" or "[go freebsd,macos]"), in which case the
+//     section only contributes specs when goos matches one of the listed
+//     OSes.
 //   - Any other non-blank line is treated as a package specification under the
 //     current section.
 //   - Leading and trailing whitespace is trimmed from both section headers
 //     and package specifications.
 //   - Unknown sections are ignored so the file can carry additional metadata
 //     without breaking the parser.
-func Parse(r io.Reader, sections ...string) (Config, error) {
+//
+// Specs from all matching sections with the same installer name are
+// concatenated in the order they appear in the file.
+func Parse(r io.Reader, goos string, sections ...string) (Config, error) {
 	recognized := make(map[string]struct{}, len(sections))
 	for _, s := range sections {
 		recognized[s] = struct{}{}
@@ -119,7 +173,7 @@ func Parse(r io.Reader, sections ...string) (Config, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	section := ""
+	section := "" // current recognized installer name, "" when ignoring
 	for scanner.Scan() {
 		raw := scanner.Text()
 		line := strings.TrimSpace(raw)
@@ -129,10 +183,7 @@ func Parse(r io.Reader, sections ...string) (Config, error) {
 		}
 
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(line[1 : len(line)-1])
-			if _, ok := recognized[section]; !ok {
-				section = "" // ignore contents of unrecognized sections
-			}
+			section = matchSection(strings.TrimSpace(line[1:len(line)-1]), goos, recognized)
 			continue
 		}
 
@@ -144,6 +195,38 @@ func Parse(r io.Reader, sections ...string) (Config, error) {
 		return Config{}, fmt.Errorf("scan: %w", err)
 	}
 	return cfg, nil
+}
+
+// matchSection parses the text between the brackets of a section header and
+// returns the installer name when the section is recognized and applies to
+// goos, or "" otherwise. A header of the form "name" matches all OSes. A
+// header of the form "name os1,os2 ..." only matches when goos equals one of
+// the listed OS names; the OS list may be split across whitespace-separated
+// fields, each of which may itself contain comma-separated names.
+func matchSection(header, goos string, recognized map[string]struct{}) string {
+	fields := strings.Fields(header)
+	if len(fields) == 0 {
+		return ""
+	}
+	name := fields[0]
+	if _, ok := recognized[name]; !ok {
+		return ""
+	}
+	if len(fields) == 1 {
+		return name // no OS filter: applies to all OSes
+	}
+	for _, osField := range fields[1:] {
+		for osName := range strings.SplitSeq(osField, ",") {
+			osName = strings.TrimSpace(osName)
+			if osName == "" {
+				continue
+			}
+			if matchOS(osName, goos) {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // ResolvePath returns the absolute path of the chezget configuration file

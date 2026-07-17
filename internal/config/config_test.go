@@ -31,7 +31,7 @@ should-not-appear
 
 func TestParseBasic(t *testing.T) {
 	t.Parallel()
-	cfg, err := Parse(strings.NewReader(sampleConfig), "go", "rust")
+	cfg, err := Parse(strings.NewReader(sampleConfig), "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestParseBasic(t *testing.T) {
 
 func TestParseEmpty(t *testing.T) {
 	t.Parallel()
-	cfg, err := Parse(strings.NewReader(""), "go", "rust")
+	cfg, err := Parse(strings.NewReader(""), "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestParseCommentsAndBlankLines(t *testing.T) {
   
 github.com/foo/bar
 `
-	cfg, err := Parse(strings.NewReader(src), "go", "rust")
+	cfg, err := Parse(strings.NewReader(src), "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -87,7 +87,7 @@ github.com/foo/bar
 func TestParseTrimsWhitespace(t *testing.T) {
 	t.Parallel()
 	src := "[go]\n   github.com/foo/bar   \n\tgolang.org/x/pkga\n"
-	cfg, err := Parse(strings.NewReader(src), "go", "rust")
+	cfg, err := Parse(strings.NewReader(src), "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -107,7 +107,7 @@ keep-me
 [rust]
 keep-rust
 `
-	cfg, err := Parse(strings.NewReader(src), "go", "rust")
+	cfg, err := Parse(strings.NewReader(src), "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestParsePackagesBeforeAnySection(t *testing.T) {
 [go]
 real-package
 `
-	cfg, err := Parse(strings.NewReader(src), "go", "rust")
+	cfg, err := Parse(strings.NewReader(src), "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -143,7 +143,7 @@ real-package
 func TestParseSectionHeaderWithSpaces(t *testing.T) {
 	t.Parallel()
 	src := "[ go ]\nexample.com/pkg\n"
-	cfg, err := Parse(strings.NewReader(src), "go", "rust")
+	cfg, err := Parse(strings.NewReader(src), "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -160,7 +160,7 @@ pkg-two
 [bar]
 crate-x
 `
-	cfg, err := Parse(strings.NewReader(src), "foo", "bar")
+	cfg, err := Parse(strings.NewReader(src), "linux", "foo", "bar")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -182,7 +182,7 @@ keep-me
 [rust]
 should-be-ignored
 `
-	cfg, err := Parse(strings.NewReader(src), "go")
+	cfg, err := Parse(strings.NewReader(src), "linux", "go")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestParseNoRecognizedSections(t *testing.T) {
 	src := `[go]
 should-be-ignored
 `
-	cfg, err := Parse(strings.NewReader(src))
+	cfg, err := Parse(strings.NewReader(src), "linux")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -210,7 +210,7 @@ should-be-ignored
 
 func TestLoadFromMissingFile(t *testing.T) {
 	t.Parallel()
-	_, err := LoadFrom(filepath.Join(t.TempDir(), "does-not-exist.ini"), "go", "rust")
+	_, err := LoadFrom(filepath.Join(t.TempDir(), "does-not-exist.ini"), "linux", "go", "rust")
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}
@@ -222,7 +222,7 @@ func TestLoadFromMissingFile(t *testing.T) {
 func TestLoadFromEmptyConfig(t *testing.T) {
 	t.Parallel()
 	path := writeTempFile(t, "# just comments\n\n[notes]\nfoo\n")
-	_, err := LoadFrom(path, "go", "rust")
+	_, err := LoadFrom(path, "linux", "go", "rust")
 	if !errors.Is(err, ErrEmpty) {
 		t.Fatalf("err = %v, want ErrEmpty", err)
 	}
@@ -231,7 +231,7 @@ func TestLoadFromEmptyConfig(t *testing.T) {
 func TestLoadFromValid(t *testing.T) {
 	t.Parallel()
 	path := writeTempFile(t, sampleConfig)
-	cfg, err := LoadFrom(path, "go", "rust")
+	cfg, err := LoadFrom(path, "linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestConfigDirOverrideEnv(t *testing.T) {
 
 func TestLoadViaEnvOverride(t *testing.T) {
 	t.Setenv("CHEZGET_CONFIG", writeTempFile(t, sampleConfig))
-	cfg, err := Load("go", "rust")
+	cfg, err := Load("linux", "go", "rust")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestLoadViaEnvOverride(t *testing.T) {
 
 func TestLoadMissingViaEnvOverride(t *testing.T) {
 	t.Setenv("CHEZGET_CONFIG", filepath.Join(t.TempDir(), "nope.ini"))
-	_, err := Load("go", "rust")
+	_, err := Load("linux", "go", "rust")
 	if err == nil || !IsMissing(err) {
 		t.Fatalf("err = %v, want missing", err)
 	}
@@ -374,4 +374,129 @@ func writeTempFile(t *testing.T, content string) string {
 		t.Fatalf("write file: %v", err)
 	}
 	return path
+}
+
+func TestMatchOS(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		configOS, goos string
+		want            bool
+	}{
+		{"windows", "windows", true},
+		{"linux", "linux", true},
+		{"freebsd", "freebsd", true},
+		{"macos", "darwin", true},
+		{"darwin", "darwin", true}, // raw runtime.GOOS value accepted
+		{"windows", "linux", false},
+		{"macos", "windows", false},
+		{"linux", "darwin", false},
+	}
+	for _, c := range cases {
+		if got := matchOS(c.configOS, c.goos); got != c.want {
+			t.Fatalf("matchOS(%q, %q) = %v, want %v", c.configOS, c.goos, got, c.want)
+		}
+	}
+}
+
+func TestParseOSSpecificSectionMatches(t *testing.T) {
+	t.Parallel()
+	src := `[go]
+any-os-pkg
+[go windows]
+windows-pkg
+[go linux]
+linux-pkg
+`
+	cfg, err := Parse(strings.NewReader(src), "windows", "go", "rust")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := cfg.Sections["go"]
+	want := []string{"any-os-pkg", "windows-pkg"}
+	if len(got) != len(want) {
+		t.Fatalf("go = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("go[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestParseOSSpecificSectionNonMatch(t *testing.T) {
+	t.Parallel()
+	src := `[go]
+any-os-pkg
+[go windows]
+windows-pkg
+[go linux]
+linux-pkg
+`
+	cfg, err := Parse(strings.NewReader(src), "darwin", "go", "rust")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := cfg.Sections["go"]
+	if len(got) != 1 || got[0] != "any-os-pkg" {
+		t.Fatalf("go = %v, want [any-os-pkg]", got)
+	}
+}
+
+func TestParseOSCommaList(t *testing.T) {
+	t.Parallel()
+	src := `[go freebsd,macos]
+superfile
+`
+	// macos -> darwin
+	cfg, err := Parse(strings.NewReader(src), "darwin", "go", "rust")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := len(cfg.Sections["go"]); got != 1 || cfg.Sections["go"][0] != "superfile" {
+		t.Fatalf("go = %v", cfg.Sections["go"])
+	}
+	// freebsd also matches
+	cfg2, err := Parse(strings.NewReader(src), "freebsd", "go", "rust")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := len(cfg2.Sections["go"]); got != 1 {
+		t.Fatalf("go = %v", cfg2.Sections["go"])
+	}
+	// linux does not match
+	cfg3, err := Parse(strings.NewReader(src), "linux", "go", "rust")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(cfg3.Sections) != 0 {
+		t.Fatalf("expected empty sections, got %+v", cfg3.Sections)
+	}
+}
+
+func TestParseOSFilterOnUnrecognizedInstallerIgnored(t *testing.T) {
+	t.Parallel()
+	src := `[go windows]
+windows-pkg
+[unknown linux]
+ignored-pkg
+`
+	cfg, err := Parse(strings.NewReader(src), "linux", "go")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// "go windows" does not match linux, "unknown" is not recognized.
+	if len(cfg.Sections) != 0 {
+		t.Fatalf("expected empty config, got %+v", cfg.Sections)
+	}
+}
+
+func TestParseOSSpecificEmptyWhenNoMatch(t *testing.T) {
+	t.Parallel()
+	src := `[go windows]
+windows-only
+`
+	_, err := LoadFrom(writeTempFile(t, src), "linux", "go")
+	if !errors.Is(err, ErrEmpty) {
+		t.Fatalf("err = %v, want ErrEmpty", err)
+	}
 }
