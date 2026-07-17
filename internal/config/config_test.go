@@ -323,8 +323,8 @@ func TestConfigDirOverrideEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigDir: %v", err)
 	}
-	if got != "/custom/subdir" {
-		t.Fatalf("ConfigDir = %q, want /custom/subdir", got)
+	if want := "/custom/subdir"; filepath.ToSlash(got) != want {
+		t.Fatalf("ConfigDir = %q, want %q", got, want)
 	}
 }
 
